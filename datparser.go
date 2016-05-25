@@ -1,64 +1,56 @@
-package goipipnet
+package ipipnet
 
 import (
 	"crypto/sha1"
 	"encoding/binary"
+	"github.com/yangchenxing/go-ip-index"
 	"io/ioutil"
 	"strings"
 )
 
-func LoadDatFile(path string, unknownCallback func(string, []string)) error {
+func (index *Index) loadDat() error {
+	builder := ipindex.NewIndexBuilder(index.MinBinarySearchRange)
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read local file fail: %s", err.Error())
 	}
-	return LoadDat(content, unknownCallback)
-}
-
-func LoadDat(content []byte, unknownCallback func(string, []string)) error {
 	textOffset := binary.BigEndian.Uint32(content[:4]) - 1024
 	data := &ipData{
 		sections: make([]ipSection, (textOffset-4-1024)/8),
 		checksum: sha1.Sum(content),
 	}
+	lower := uint32(1)
 	for i, offset := 0, uint32(1028); offset < textOffset; i, offset = i+1, offset+8 {
-		ip := binary.BigEndian.Uint32(content[offset : offset+4])
-		data.sections[i].upperBound = ip
-		dataRange := binary.BigEndian.Uint32(content[offset+4 : offset+8])
-		dataOffset := dataRange & uint32(0x00FFFFFF)
-		dataLength := dataRange >> 24
-		data.sections[i].result = parseResult(string(content[dataOffset:dataOffset+dataLength]), unknownCallback)
-		data.index[ip>>24] = i
+		upper := binary.BigEndian.Uint32(content[offset : offset+4])
+		textRange := binary.BigEndian.Uint32(content[offset+4 : offset+8])
+		textOffset := dataRange & uint32(0x00FFFFFF)
+		textLength := dataRange >> 24
+		result := parseResult(string(content[dataOffset : dataOffset+dataLength]))
+		err := builder.AddUint32(lower, upper, result)
+		if err != nil {
+			return fmt.Errorf("build index fail: %s", err.Error())
+		}
+		lower = upper + 1
 	}
-	index = data
+	index.index = builder.Build()
 	return nil
 }
 
-func parseResult(text string, unknownCallback func(string, []string)) Result {
+func parseDatResult(text string) Result {
 	fields := strings.Split(text, "\t")
-	var location Location
-	if country := worldCountries[fields[0]]; country != nil {
-		location = country
-		if subdivision := country.subdivisions[fields[1]]; subdivision != nil {
-			location = subdivision
-			if city := subdivision.cities[fields[2]]; city != nil {
-				location = city
-			} else if fields[2] != "" && unknownCallback != nil {
-				unknownCallback("city", fields)
-			}
-		} else if fields[1] != "" && fields[0] != fields[1] && unknownCallback != nil {
-			unknownCallback("subdivision", fields[:2])
-		}
-	} else if fields[0] != "" && unknownCallback != nil {
-		unknownCallback("country", fields[:1])
-	}
+	location := regionid.GetLocation(fields[0], fields[1], fields[2])
 	ispNames := strings.Split(fields[len(fields)-1], "/")
-	isp := worldIsps[ispNames[0]]
-	if isp == nil && ispNames[0] != "" && unknownCallback != nil {
-		unknownCallback("isp", ispNames)
+	isps := make([]*regionid.ISP, 0, len(ispNames))
+	for _, name := range ispNames {
+		if isp := regionid.GetISP(name); isp != nil {
+			isps = append(isps, isp)
+		}
+	}
+	if len(isps) == 0 {
+		isps = nil
 	}
 	return Result{
 		Location: location,
-		ISP:      isp,
+		ISPs:     isps,
 	}
 }

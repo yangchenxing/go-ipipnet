@@ -1,71 +1,79 @@
-package goipipnet
+package ipipnet
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
+	"github.com/yangchenxing/go-ip-index"
+	"github.com/yangchenxing/go-ipipnet-downloader"
+	"github.com/yangchenxing/go-regionid"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
-var (
-	errUninitialized     = errors.New("IP库未初始化")
-	errNotIPv4           = errors.New("非有效IPv4")
-	minBinarySearchRange = 10
-)
-
-type ipSection struct {
-	upperBound uint32
-	result     Result
+type Index struct {
+	*downloader.Downloader
+	Format               string
+	MinBinarySearchRange int
+	index                *ipindex.IPIndex
 }
 
-type ipData struct {
-	sections []ipSection
-	index    [256]int
-	checksum [20]byte
-}
-
-// Result 定位查询结果
 type Result struct {
-	Location Location
-	ISP      *ISP
+	Location regionid.Location
+	ISPs     []*regionid.ISP
 }
 
-var (
-	index       *ipData
-	emptyResult Result
-)
-
-func (data *ipData) lookup(ip net.IP) (Result, error) {
-	if data == nil {
-		return emptyResult, errUninitialized
+func (result Result) Equal(other interface{}) bool {
+	if result.Location != other || len(result.ISPs) != len(other.ISPs) {
+		return false
 	}
-	if ip = ip.To4(); ip == nil {
-		return emptyResult, errNotIPv4
-	}
-	key := binary.BigEndian.Uint32([]byte(ip))
-	indexKey := key >> 24
-	if (indexKey >> 24) == 0 {
-		return emptyResult, fmt.Errorf("无效IP: %s", ip)
-	}
-	lower, upper := data.index[indexKey-1]+1, data.index[indexKey]
-	for upper-lower > minBinarySearchRange {
-		mid := (lower + upper) / 2
-		if key <= data.sections[mid-1].upperBound {
-			upper = mid - 1
-		} else if key > data.sections[mid].upperBound {
-			lower = mid + 1
-		} else {
-			return data.sections[mid].result, nil
+	for i, a := range result.ISPs {
+		if a != other.ISPs[i] {
+			return false
 		}
 	}
-	for i := upper; i > lower; i++ {
-		if key <= data.sections[i].upperBound {
-			return data.sections[i].result, nil
-		}
-	}
-	return data.sections[lower].result, nil
+	return true
 }
 
-func Lookup(ip net.IP) (Result, error) {
-	return index.lookup(ip)
+func (index *Index) Initialize() error {
+	if index.Format != "DAT" {
+		return fmt.Errorf("unsupported format: %s", index.Format)
+	}
+	if !regionid.Initialized() {
+		if err := regionid.LoadBuiltinWorld(); err != nil {
+			return fmt.Errorf("load built-in regionid fail: %s", err.Error())
+		}
+	}
+	if index.MinBinarySearchRange <= 0 {
+		index.MinBinarySearchRange = ipindex.DefaultMinBinarySearchRange
+	}
+	if err := index.EnsureLocal(); err != nil {
+		return fmt.Errorf("ensure local file fail: %s", err.Error())
+	}
+	if err := index.load(); err != nil {
+		return fmt.Errorf("load local file fail: %s", err.Error())
+	}
+	index.UpdateCallback = func(string) { index.load() }
+	go index.StartWatch()
+	return nil
+}
+
+func (index *Index) Search(ip net.IP) (result Result, err error) {
+	var value ipindex.Value
+	value, err = index.index.Search(ip)
+	if err == nil && value != nil {
+		result = value.(Result)
+	}
+	return
+}
+
+func (index *Index) load() error {
+	switch index.Format {
+	case "DAT":
+		return index.loadDat()
+	}
+	return fmt.Errorf("unsupported format: %q", format)
 }
