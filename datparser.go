@@ -1,31 +1,28 @@
 package ipipnet
 
 import (
-	"crypto/sha1"
 	"encoding/binary"
+	"fmt"
 	"github.com/yangchenxing/go-ip-index"
+	"github.com/yangchenxing/go-regionid"
 	"io/ioutil"
 	"strings"
 )
 
 func (index *Index) loadDat() error {
 	builder := ipindex.NewIndexBuilder(index.MinBinarySearchRange)
-	content, err := ioutil.ReadFile(path)
+	content, err := ioutil.ReadFile(index.LocalPath)
 	if err != nil {
 		return fmt.Errorf("read local file fail: %s", err.Error())
 	}
 	textOffset := binary.BigEndian.Uint32(content[:4]) - 1024
-	data := &ipData{
-		sections: make([]ipSection, (textOffset-4-1024)/8),
-		checksum: sha1.Sum(content),
-	}
 	lower := uint32(1)
 	for i, offset := 0, uint32(1028); offset < textOffset; i, offset = i+1, offset+8 {
 		upper := binary.BigEndian.Uint32(content[offset : offset+4])
-		textRange := binary.BigEndian.Uint32(content[offset+4 : offset+8])
-		textOffset := dataRange & uint32(0x00FFFFFF)
-		textLength := dataRange >> 24
-		result := parseResult(string(content[dataOffset : dataOffset+dataLength]))
+		dataRange := binary.LittleEndian.Uint32(content[offset+4 : offset+8])
+		dataOffset := textOffset + dataRange&uint32(0x00FFFFFF)
+		dataLength := dataRange >> 24
+		result := parseDatResult(string(content[dataOffset : dataOffset+dataLength]))
 		err := builder.AddUint32(lower, upper, result)
 		if err != nil {
 			return fmt.Errorf("build index fail: %s", err.Error())

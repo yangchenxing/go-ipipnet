@@ -1,33 +1,34 @@
 package ipipnet
 
 import (
-	"errors"
 	"fmt"
 	"github.com/yangchenxing/go-ip-index"
 	"github.com/yangchenxing/go-ipipnet-downloader"
 	"github.com/yangchenxing/go-regionid"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
+	"net"
 )
 
+// Index provide ip to regions index ability. It supports data in "DAT" format only.
 type Index struct {
+	// The downloader to fetch remote data.
 	*downloader.Downloader
-	Format               string
+
+	// Minimal range for binary search. It is used by ip index.
 	MinBinarySearchRange int
-	index                *ipindex.IPIndex
+
+	index *ipindex.IPIndex
 }
 
+// Result is the search result
 type Result struct {
 	Location regionid.Location
 	ISPs     []*regionid.ISP
 }
 
-func (result Result) Equal(other interface{}) bool {
-	if result.Location != other || len(result.ISPs) != len(other.ISPs) {
+// Equal compare two Result instance. It returns true if they are equal.
+func (result Result) Equal(o interface{}) bool {
+	other, ok := o.(Result)
+	if !ok || result.Location != other.Location || len(result.ISPs) != len(other.ISPs) {
 		return false
 	}
 	for i, a := range result.ISPs {
@@ -38,10 +39,8 @@ func (result Result) Equal(other interface{}) bool {
 	return true
 }
 
+// Initialize setup the Index instance.
 func (index *Index) Initialize() error {
-	if index.Format != "DAT" {
-		return fmt.Errorf("unsupported format: %s", index.Format)
-	}
 	if !regionid.Initialized() {
 		if err := regionid.LoadBuiltinWorld(); err != nil {
 			return fmt.Errorf("load built-in regionid fail: %s", err.Error())
@@ -61,6 +60,7 @@ func (index *Index) Initialize() error {
 	return nil
 }
 
+// Search returns the region and isp assiciated with the ip.
 func (index *Index) Search(ip net.IP) (result Result, err error) {
 	var value ipindex.Value
 	value, err = index.index.Search(ip)
@@ -71,9 +71,5 @@ func (index *Index) Search(ip net.IP) (result Result, err error) {
 }
 
 func (index *Index) load() error {
-	switch index.Format {
-	case "DAT":
-		return index.loadDat()
-	}
-	return fmt.Errorf("unsupported format: %q", format)
+	return index.loadDat()
 }
