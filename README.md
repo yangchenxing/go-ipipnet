@@ -3,6 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/yangchenxing/go-ipipnet)](https://goreportcard.com/report/github.com/yangchenxing/go-ipipnet)
 [![Build Status](https://travis-ci.org/yangchenxing/go-ipipnet.svg?branch=master)](https://travis-ci.org/yangchenxing/go-ipipnet)
 [![GoDoc](http://godoc.org/github.com/yangchenxing/go-ipipnet?status.svg)](http://godoc.org/github.com/yangchenxing/go-ipipnet)
+[![Coverage Status](https://coveralls.io/repos/github/yangchenxing/go-ipipnet/badge.svg?branch=master)](https://coveralls.io/github/yangchenxing/go-ipipnet?branch=master)
 
 My golang library for IPIP.net.
 
