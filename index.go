@@ -16,7 +16,11 @@ type Index struct {
 	// Minimal range for binary search. It is used by ip index.
 	MinBinarySearchRange int
 
-	index *ipindex.IPIndex
+	// Keep unknown isp with ID as 0
+	KeepUnknownISP bool
+
+	index       *ipindex.IPIndex
+	unknownISPs map[string]*regionid.ISP
 }
 
 // Result is the search result
@@ -72,4 +76,16 @@ func (index *Index) Search(ip net.IP) (result Result, err error) {
 
 func (index *Index) load() error {
 	return index.loadDat()
+}
+
+func (index *Index) getUnknownISP(name string) *regionid.ISP {
+	isp := index.unknownISPs[name]
+	if isp == nil {
+		isp = &regionid.ISP{
+			ID:   0,
+			Name: name,
+		}
+		index.unknownISPs[name] = isp
+	}
+	return isp
 }

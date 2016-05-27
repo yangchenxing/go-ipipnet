@@ -22,7 +22,7 @@ func (index *Index) loadDat() error {
 		dataRange := binary.LittleEndian.Uint32(content[offset+4 : offset+8])
 		dataOffset := textOffset + dataRange&uint32(0x00FFFFFF)
 		dataLength := dataRange >> 24
-		result := parseDatResult(string(content[dataOffset : dataOffset+dataLength]))
+		result := index.parseDatResult(string(content[dataOffset : dataOffset+dataLength]))
 		err := builder.AddUint32(lower, upper, result)
 		if err != nil {
 			return fmt.Errorf("build index fail: %s", err.Error())
@@ -33,13 +33,17 @@ func (index *Index) loadDat() error {
 	return nil
 }
 
-func parseDatResult(text string) Result {
+func (index *Index) parseDatResult(text string) Result {
 	fields := strings.Split(text, "\t")
 	location := regionid.GetLocation(fields[0], fields[1], fields[2])
 	ispNames := strings.Split(fields[len(fields)-1], "/")
 	isps := make([]*regionid.ISP, 0, len(ispNames))
 	for _, name := range ispNames {
-		if isp := regionid.GetISP(name); isp != nil {
+		isp := regionid.GetISP(name)
+		if isp == nil && index.KeepUnknownISP {
+			isp = index.getUnknownISP(name)
+		}
+		if isp != nil {
 			isps = append(isps, isp)
 		}
 	}
