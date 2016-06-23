@@ -3,10 +3,11 @@ package ipipnet
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yangchenxing/go-ip-index"
-	"github.com/yangchenxing/go-regionid"
 	"io/ioutil"
 	"strings"
+
+	"github.com/yangchenxing/go-ip-index"
+	"github.com/yangchenxing/go-regionid"
 )
 
 func (index *Index) loadDat() error {
@@ -14,6 +15,9 @@ func (index *Index) loadDat() error {
 	content, err := ioutil.ReadFile(index.LocalPath)
 	if err != nil {
 		return fmt.Errorf("read local file fail: %s", err.Error())
+	}
+	if len(content) < 1028 {
+		return fmt.Errorf("bad content length: %d", len(content))
 	}
 	textOffset := binary.BigEndian.Uint32(content[:4]) - 1024
 	lower := uint32(1)
@@ -23,10 +27,8 @@ func (index *Index) loadDat() error {
 		dataOffset := textOffset + dataRange&uint32(0x00FFFFFF)
 		dataLength := dataRange >> 24
 		result := index.parseDatResult(string(content[dataOffset : dataOffset+dataLength]))
-		err := builder.AddUint32(lower, upper, result)
-		if err != nil {
-			return fmt.Errorf("build index fail: %s", err.Error())
-		}
+		builder.AddUint32(lower, upper, result)
+		// 此处不检查错误添加错误情况，由ipip.net确保文件格式正确
 		lower = upper + 1
 	}
 	index.index = builder.Build()

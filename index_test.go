@@ -2,10 +2,13 @@ package ipipnet
 
 import (
 	"fmt"
-	"github.com/yangchenxing/go-ipipnet-downloader"
 	"net"
 	"os"
 	"testing"
+
+	"io/ioutil"
+
+	"github.com/yangchenxing/go-ipipnet-downloader"
 )
 
 var (
@@ -29,6 +32,27 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+func TestBadInitialize(t *testing.T) {
+	index := &Index{
+		Downloader: &downloader.Downloader{
+			LocalPath: "badsample.txt",
+		},
+	}
+	if err := index.Initialize(); err == nil {
+		t.Error("unexpected success")
+		return
+	}
+	if err := ioutil.WriteFile("badsample.txt", []byte{}, 0755); err != nil {
+		t.Error("save badsample.txt fail:", err.Error())
+		return
+	}
+	defer os.Remove("badsample.txt")
+	if err := index.Initialize(); err == nil {
+		t.Error("unexpected success")
+		return
+	}
+}
+
 func BenchmarkSearch(b *testing.B) {
 	testIP := []net.IP{
 		net.ParseIP("58.32.100.100"),
@@ -45,11 +69,13 @@ func TestMain(m *testing.M) {
 			LocalPath: "sample/mydata4vipweek2.dat",
 			CheckETag: false,
 		},
+		KeepUnknownISP: true,
 	}
 	if err := idx.Initialize(); err != nil {
 		fmt.Fprintf(os.Stderr, "initialize index fail: %s\n", err.Error())
 		os.Exit(1)
 	}
+	idx.update("sample/mydata4vipweek2.dat")
 	code := m.Run()
 	os.Exit(code)
 }

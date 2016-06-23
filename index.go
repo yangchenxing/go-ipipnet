@@ -2,10 +2,11 @@ package ipipnet
 
 import (
 	"fmt"
+	"net"
+
 	"github.com/yangchenxing/go-ip-index"
 	"github.com/yangchenxing/go-ipipnet-downloader"
 	"github.com/yangchenxing/go-regionid"
-	"net"
 )
 
 // Index provide ip to regions index ability. It supports data in "DAT" format only.
@@ -46,9 +47,7 @@ func (result Result) Equal(o interface{}) bool {
 // Initialize setup the Index instance.
 func (index *Index) Initialize() error {
 	if !regionid.Initialized() {
-		if err := regionid.LoadBuiltinWorld(); err != nil {
-			return fmt.Errorf("load built-in regionid fail: %s", err.Error())
-		}
+		regionid.LoadBuiltinWorld()
 	}
 	if index.MinBinarySearchRange <= 0 {
 		index.MinBinarySearchRange = ipindex.DefaultMinBinarySearchRange
@@ -59,7 +58,7 @@ func (index *Index) Initialize() error {
 	if err := index.load(); err != nil {
 		return fmt.Errorf("load local file fail: %s", err.Error())
 	}
-	index.UpdateCallback = func(string) { index.load() }
+	index.UpdateCallback = index.update
 	go index.StartWatch()
 	return nil
 }
@@ -78,7 +77,14 @@ func (index *Index) load() error {
 	return index.loadDat()
 }
 
+func (index *Index) update(_ string) {
+	index.load()
+}
+
 func (index *Index) getUnknownISP(name string) *regionid.ISP {
+	if index.unknownISPs == nil {
+		index.unknownISPs = make(map[string]*regionid.ISP)
+	}
 	isp := index.unknownISPs[name]
 	if isp == nil {
 		isp = &regionid.ISP{
